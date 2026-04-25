@@ -5,6 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Aperçu Dashboard reTerminal</title>
     <style>
+      @font-face {
+        font-family: "SquareFont";
+        src: url("./fonts/squarefont/Square.ttf") format("truetype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "SquareFont";
+        src: url("./fonts/squarefont/Squareo.ttf") format("truetype");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Gameplay";
+        src: url("./fonts/gameplay/Gameplay.ttf") format("truetype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Inter";
+        src: url("./fonts/inter/Inter-Regular.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Inter";
+        src: url("./fonts/inter/Inter-Bold.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Roboto";
+        src: url("./fonts/roboto/Roboto-Variable.ttf") format("truetype");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Arimo";
+        src: url("./fonts/arimo/Arimo-Variable.ttf") format("truetype");
+        font-weight: 400 700;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("./fonts/jetbrainsmono/JetBrainsMono-Variable.ttf") format("truetype");
+        font-weight: 100 800;
+        font-style: normal;
+        font-display: swap;
+      }
+
       :root {
         color-scheme: light only;
       }
@@ -22,27 +86,43 @@
         overflow: hidden;
         background: #ffffff;
         color: #000000;
-        font-family: Arial, Helvetica, sans-serif;
+        font-family: "JetBrains Mono", "Arimo", Tahoma, Verdana, "Inter", "Liberation Sans", "Nimbus Sans", Arial, sans-serif;
       }
 
       .screen {
         position: relative;
         width: 100%;
         height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
         padding: 24px;
       }
 
+      .top-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 24px;
+      }
+
+      .left-panel {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+
       .date-time {
-        position: absolute;
-        top: 24px;
-        left: 24px;
         margin: 0;
         text-align: left;
+      }
+
+      .light-indicator {
+        margin-top: 6px;
+        font-size: 30px;
+        line-height: 1;
+        visibility: hidden;
+      }
+
+      .light-indicator.on {
+        visibility: visible;
       }
 
       .date {
@@ -58,28 +138,136 @@
         letter-spacing: 0.02em;
       }
 
-      .label {
-        margin: 18px 0 4px;
-        font-size: 28px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
+      .right-panel {
+        margin-top: 4px;
+        text-align: right;
       }
 
-      .value {
+      .weather {
         margin: 0;
-        font-size: 56px;
-        line-height: 1.1;
+        font-size: 28px;
+        line-height: 1.2;
+      }
+
+      .temperatures {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.25;
+      }
+
+      .calendar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 140px;
+        height: 316px;
+        border: none;
+        border-top: 2px solid #000;
+        border-radius: 0;
+        padding: 10px 24px 0;
+        text-align: left;
+      }
+
+      .calendar-title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: bold;
+      }
+
+      .calendar-grid {
+        margin-top: 8px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        height: 270px;
+      }
+
+      .calendar-day {
+        box-sizing: content-box;
+        border: none;
+        border-radius: 8px;
+        padding: 4px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .calendar-day-header {
+        margin: 0 0 4px;
+        font-size: 16px;
+        font-weight: 700;
+        text-transform: uppercase;
+        border-bottom: none;
+        padding-bottom: 2px;
+        color: #000;
+      }
+
+      .calendar-day-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .calendar-event {
+        margin: 0;
+        border-radius: 0;
+        background: transparent;
+        border: none;
+        border-left: 2px solid #000;
+        padding: 2px 0 2px 6px;
+        font-size: 16px;
+        line-height: 1.2;
+        color: #000;
+      }
+
+      .calendar-event-title {
+        margin: 0;
+        font-weight: 700;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .calendar-event-meta {
+        margin: 2px 0 0;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
+      .calendar-empty {
+        margin: 0;
+        font-size: 16px;
+        color: #000;
+      }
+
+      .calendar-more {
+        margin: 0;
+        font-size: 16px;
+        color: #000;
       }
     </style>
   </head>
   <body>
     <main class="screen" role="main" aria-label="Aperçu du dashboard">
-      <div class="date-time" aria-live="polite">
-        <p id="date" class="date">--</p>
-        <p id="time" class="clock">--:--</p>
+      <div class="top-row">
+        <div class="left-panel">
+          <span id="light-indicator" class="light-indicator" aria-hidden="true">💡</span>
+          <div class="date-time" aria-live="polite">
+            <p id="date" class="date">--</p>
+            <p id="time" class="clock">--:--</p>
+          </div>
+        </div>
+        <div class="right-panel" aria-live="polite">
+          <p id="weather-state" class="weather">--</p>
+          <p id="temps" class="temperatures">Ext: -- / Int: --</p>
+        </div>
       </div>
-      <p class="label">Volet cuisine</p>
-      <p id="blind-state" class="value" aria-live="polite">Chargement...</p>
+      <section class="calendar" aria-label="Calendrier">
+        <p class="calendar-title">Collaboration - 4 jours</p>
+        <div id="calendar-grid" class="calendar-grid" aria-live="polite"></div>
+      </section>
     </main>
     <script>
       const DATE_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
@@ -91,20 +279,35 @@
         hour: "2-digit",
         minute: "2-digit",
       });
-
-      // Renseignez ceci si l'entity_id est connue ; sinon détection automatique.
-      const CUISINE_BLIND_ENTITY_ID = "";
-      const BLIND_STATE_EL = document.getElementById("blind-state");
       const DATE_EL = document.getElementById("date");
       const TIME_EL = document.getElementById("time");
-      const CANDIDATE_PATTERNS = [
-        /cover\..*cuisine/i,
-        /cover\..*(volet|blind|store)/i,
-      ];
+      const LIGHT_INDICATOR_EL = document.getElementById("light-indicator");
+      const WEATHER_STATE_EL = document.getElementById("weather-state");
+      const TEMPS_EL = document.getElementById("temps");
+      const CALENDAR_GRID_EL = document.getElementById("calendar-grid");
+
+      const OUTDOOR_TEMP_ENTITY_ID = "sensor.temperature_humidite_exterieure_temperature";
+      const INDOOR_TEMP_ENTITY_ID = "sensor.temperature_humidite_1_temperature";
+      const WEATHER_ENTITY_ID = "weather.forecast_maison";
+      const COLLABORATION_CALENDAR_ID = "calendar.collaboration";
+      const EVENT_DATE_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
+      });
+      const EVENT_TIME_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const DAY_HEADER_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
+        weekday: "short",
+        day: "2-digit",
+      });
 
       function updateClock() {
         const now = new Date();
-        DATE_EL.textContent = DATE_FORMATTER.format(now);
+        const formattedDate = DATE_FORMATTER.format(now);
+        DATE_EL.textContent = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
         TIME_EL.textContent = CLOCK_FORMATTER.format(now);
       }
 
@@ -119,18 +322,6 @@
         }
       }
 
-      function formatBlindState(state) {
-        const map = {
-          open: "Ouvert",
-          opening: "Ouverture",
-          closed: "Fermé",
-          closing: "Fermeture",
-          unavailable: "Indisponible",
-          unknown: "Inconnu",
-        };
-        return map[state] ?? state;
-      }
-
       async function fetchStates(token) {
         const response = await fetch("/api/states", {
           headers: { Authorization: `Bearer ${token}` },
@@ -139,48 +330,218 @@
         return response.json();
       }
 
-      function detectCuisineBlind(states) {
-        if (CUISINE_BLIND_ENTITY_ID) {
-          return states.find((s) => s.entity_id === CUISINE_BLIND_ENTITY_ID) ?? null;
-        }
-
-        for (const pattern of CANDIDATE_PATTERNS) {
-          const match = states.find((s) => pattern.test(s.entity_id));
-          if (match) return match;
-        }
-
-        return states.find((s) => {
-          if (!s.entity_id.startsWith("cover.")) return false;
-          const name = (s.attributes?.friendly_name || "").toLowerCase();
-          return (
-            name.includes("cuisine") &&
-            (name.includes("volet") || name.includes("blind") || name.includes("store"))
-          );
-        }) ?? null;
+      async function fetchCalendarEvents(token, calendarId, startISO, endISO) {
+        const url = `/api/calendars/${encodeURIComponent(calendarId)}?start=${encodeURIComponent(startISO)}&end=${encodeURIComponent(endISO)}`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
       }
 
-      async function updateBlindState() {
+      function formatWeatherState(state) {
+        const map = {
+          clear: "Soleil",
+          clear_night: "Nuit claire",
+          cloudy: "Nuageux",
+          exceptional: "Exceptionnel",
+          fog: "Brouillard",
+          hail: "Grêle",
+          lightning: "Orage",
+          lightning_rainy: "Orage/pluie",
+          partlycloudy: "Éclaircies",
+          pouring: "Averses fortes",
+          rainy: "Pluie",
+          snowy: "Neige",
+          snowy_rainy: "Neige/pluie",
+          sunny: "Ensoleillé",
+          windy: "Venteux",
+          windy_variant: "Vent variable",
+          unavailable: "Indisponible",
+          unknown: "Inconnu",
+        };
+        return map[state] ?? state;
+      }
+
+      function findEntity(states, id) {
+        return states.find((s) => s.entity_id === id) ?? null;
+      }
+
+      function formatTemperature(entity) {
+        if (!entity || entity.state === "unknown" || entity.state === "unavailable") return "--";
+        const value = Number(entity.state);
+        if (Number.isNaN(value)) return "--";
+        return `${Math.round(value)}°C`;
+      }
+
+      function isAnyLightOn(states) {
+        return states.some((entity) => entity.entity_id.startsWith("light.") && entity.state === "on");
+      }
+
+      function getEventStartDate(event) {
+        const start = event?.start;
+        if (!start) return null;
+        if (typeof start === "string") return new Date(start);
+        if (typeof start === "object" && start.dateTime) return new Date(start.dateTime);
+        if (typeof start === "object" && start.date) return new Date(`${start.date}T00:00:00`);
+        return null;
+      }
+
+      function getEventEndDate(event) {
+        const end = event?.end;
+        if (!end) return null;
+        if (typeof end === "string") return new Date(end);
+        if (typeof end === "object" && end.dateTime) return new Date(end.dateTime);
+        if (typeof end === "object" && end.date) return new Date(`${end.date}T00:00:00`);
+        return null;
+      }
+
+      function isAllDayEvent(event) {
+        return Boolean(
+          event?.all_day ||
+            (typeof event?.start === "object" && "date" in event.start && !("dateTime" in event.start))
+        );
+      }
+
+      function formatEventMeta(event) {
+        const startDate = getEventStartDate(event);
+        if (!startDate || Number.isNaN(startDate.getTime())) return "Date inconnue";
+        if (isAllDayEvent(event)) return "Journée";
+
+        const endDate = getEventEndDate(event);
+        const startTime = EVENT_TIME_FORMATTER.format(startDate);
+        if (endDate && !Number.isNaN(endDate.getTime())) {
+          const endTime = EVENT_TIME_FORMATTER.format(endDate);
+          return `${startTime} - ${endTime}`;
+        }
+        return startTime;
+      }
+
+      function toDayKey(date) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function renderCalendarStatus(message) {
+        CALENDAR_GRID_EL.innerHTML = `<div class="calendar-day"><p class="calendar-empty">${escapeHtml(message)}</p></div>`;
+      }
+
+      function buildDayBuckets(events, startDate) {
+        const buckets = [];
+        for (let offset = 0; offset < 4; offset += 1) {
+          const dayDate = new Date(startDate);
+          dayDate.setHours(0, 0, 0, 0);
+          dayDate.setDate(dayDate.getDate() + offset);
+          buckets.push({
+            key: toDayKey(dayDate),
+            date: dayDate,
+            events: [],
+          });
+        }
+
+        const bucketMap = new Map(buckets.map((b) => [b.key, b]));
+        for (const event of events) {
+          const eventStart = getEventStartDate(event);
+          if (!eventStart || Number.isNaN(eventStart.getTime())) continue;
+          const bucket = bucketMap.get(toDayKey(eventStart));
+          if (bucket) bucket.events.push(event);
+        }
+
+        for (const bucket of buckets) {
+          bucket.events.sort((a, b) => {
+            const aStart = getEventStartDate(a)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+            const bStart = getEventStartDate(b)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+            return aStart - bStart;
+          });
+        }
+
+        return buckets;
+      }
+
+      function renderCalendarEvents(events, startDate) {
+        const buckets = buildDayBuckets(events, startDate);
+        const daysHtml = buckets
+          .map((bucket) => {
+            const dayLabel = DAY_HEADER_FORMATTER.format(bucket.date).replace(".", "").toUpperCase();
+            const visibleEvents = bucket.events.slice(0, 4);
+
+            const eventsHtml = visibleEvents.length
+              ? visibleEvents
+                  .map((event) => {
+                    const title = escapeHtml(event.summary || event.message || "Sans titre");
+                    const meta = escapeHtml(formatEventMeta(event));
+                    return `<li class="calendar-event"><p class="calendar-event-title">${title}</p><p class="calendar-event-meta">${meta}</p></li>`;
+                  })
+                  .join("")
+              : '<p class="calendar-empty">Aucun</p>';
+
+            const moreHtml =
+              bucket.events.length > visibleEvents.length
+                ? `<p class="calendar-more">+${bucket.events.length - visibleEvents.length}</p>`
+                : "";
+
+            return `<div class="calendar-day"><p class="calendar-day-header">${dayLabel}</p><ul class="calendar-day-list">${eventsHtml}</ul>${moreHtml}</div>`;
+          })
+          .join("");
+
+        CALENDAR_GRID_EL.innerHTML = daysHtml;
+      }
+
+      async function updateDashboardData() {
         try {
           const token = getAccessToken();
           if (!token) {
-            BLIND_STATE_EL.textContent = "Token HA manquant";
+            WEATHER_STATE_EL.textContent = "Token HA manquant";
+            TEMPS_EL.textContent = "Ext: -- / Int: --";
+            LIGHT_INDICATOR_EL.classList.remove("on");
+            renderCalendarStatus("Token HA manquant");
             return;
           }
 
-          const states = await fetchStates(token);
-          const entity = detectCuisineBlind(states);
-          BLIND_STATE_EL.textContent = entity
-            ? formatBlindState(entity.state)
-            : "Volet introuvable";
+          const startDate = new Date();
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 4);
+
+          const [states, calendarEvents] = await Promise.all([
+            fetchStates(token),
+            fetchCalendarEvents(token, COLLABORATION_CALENDAR_ID, startDate.toISOString(), endDate.toISOString()),
+          ]);
+          const weatherEntity = findEntity(states, WEATHER_ENTITY_ID);
+          const outdoorTemp = findEntity(states, OUTDOOR_TEMP_ENTITY_ID);
+          const indoorTemp = findEntity(states, INDOOR_TEMP_ENTITY_ID);
+
+          WEATHER_STATE_EL.textContent = weatherEntity
+            ? formatWeatherState(weatherEntity.state)
+            : "Météo indisponible";
+          TEMPS_EL.textContent = `Ext: ${formatTemperature(outdoorTemp)} / Int: ${formatTemperature(indoorTemp)}`;
+
+          if (isAnyLightOn(states)) {
+            LIGHT_INDICATOR_EL.classList.add("on");
+          } else {
+            LIGHT_INDICATOR_EL.classList.remove("on");
+          }
+
+          renderCalendarEvents(Array.isArray(calendarEvents) ? calendarEvents : [], startDate);
         } catch {
-          BLIND_STATE_EL.textContent = "Etat indisponible";
+          WEATHER_STATE_EL.textContent = "Météo indisponible";
+          TEMPS_EL.textContent = "Ext: -- / Int: --";
+          LIGHT_INDICATOR_EL.classList.remove("on");
+          renderCalendarStatus("Calendrier indisponible");
         }
       }
 
       updateClock();
-      updateBlindState();
+      updateDashboardData();
       setInterval(updateClock, 1000);
-      setInterval(updateBlindState, 30000);
+      setInterval(updateDashboardData, 30000);
     </script>
   </body>
 </html>
