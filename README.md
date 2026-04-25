@@ -87,6 +87,25 @@ Tip: if you see stale content in browser tests, add a cache buster:
 
 - `http://<HA_HOST>:8123/local/reterminal/index.html?v=2`
 
+## Local development (without HAOS deploy)
+
+To test the dashboard locally while developing, you can use the included preview server.
+It reads your Home Assistant token from `.env`, injects it into browser localStorage, and proxies `/api/*` calls to Home Assistant.
+
+1. Create your local env file:
+   - `cp .env.example .env`
+2. Edit `.env`:
+   - `HA_URL=http://<HA_HOST>:8123`
+   - `HA_TOKEN=<LONG_LIVED_ACCESS_TOKEN>`
+3. Start local preview:
+   - `python3 scripts/dev_preview.py`
+4. Open:
+   - `http://127.0.0.1:8000`
+
+Notes:
+- This is for local development only.
+- `.env` is gitignored to avoid committing secrets.
+
 ## Troubleshooting
 
 - `:10000/local/...` redirects to `/home/overview` or wrong dashboard:
