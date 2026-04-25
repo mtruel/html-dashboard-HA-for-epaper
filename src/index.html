@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aperçu Dashboard reTerminal</title>
+    <style>
+      :root {
+        color-scheme: light only;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 800px;
+        height: 480px;
+        overflow: hidden;
+        background: #ffffff;
+        color: #000000;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      .screen {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 24px;
+      }
+
+      .date-time {
+        position: absolute;
+        top: 24px;
+        left: 24px;
+        margin: 0;
+        text-align: left;
+      }
+
+      .date {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .clock {
+        margin: 0;
+        font-size: 60px;
+        line-height: 1.05;
+        letter-spacing: 0.02em;
+      }
+
+      .label {
+        margin: 18px 0 4px;
+        font-size: 28px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .value {
+        margin: 0;
+        font-size: 56px;
+        line-height: 1.1;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="screen" role="main" aria-label="Aperçu du dashboard">
+      <div class="date-time" aria-live="polite">
+        <p id="date" class="date">--</p>
+        <p id="time" class="clock">--:--</p>
+      </div>
+      <p class="label">Volet cuisine</p>
+      <p id="blind-state" class="value" aria-live="polite">Chargement...</p>
+    </main>
+    <script>
+      const DATE_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+      });
+      const CLOCK_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      // Renseignez ceci si l'entity_id est connue ; sinon détection automatique.
+      const CUISINE_BLIND_ENTITY_ID = "";
+      const BLIND_STATE_EL = document.getElementById("blind-state");
+      const DATE_EL = document.getElementById("date");
+      const TIME_EL = document.getElementById("time");
+      const CANDIDATE_PATTERNS = [
+        /cover\..*cuisine/i,
+        /cover\..*(volet|blind|store)/i,
+      ];
+
+      function updateClock() {
+        const now = new Date();
+        DATE_EL.textContent = DATE_FORMATTER.format(now);
+        TIME_EL.textContent = CLOCK_FORMATTER.format(now);
+      }
+
+      function getAccessToken() {
+        try {
+          const raw = localStorage.getItem("hassTokens");
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          return parsed?.access_token ?? null;
+        } catch {
+          return null;
+        }
+      }
+
+      function formatBlindState(state) {
+        const map = {
+          open: "Ouvert",
+          opening: "Ouverture",
+          closed: "Fermé",
+          closing: "Fermeture",
+          unavailable: "Indisponible",
+          unknown: "Inconnu",
+        };
+        return map[state] ?? state;
+      }
+
+      async function fetchStates(token) {
+        const response = await fetch("/api/states", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      }
+
+      function detectCuisineBlind(states) {
+        if (CUISINE_BLIND_ENTITY_ID) {
+          return states.find((s) => s.entity_id === CUISINE_BLIND_ENTITY_ID) ?? null;
+        }
+
+        for (const pattern of CANDIDATE_PATTERNS) {
+          const match = states.find((s) => pattern.test(s.entity_id));
+          if (match) return match;
+        }
+
+        return states.find((s) => {
+          if (!s.entity_id.startsWith("cover.")) return false;
+          const name = (s.attributes?.friendly_name || "").toLowerCase();
+          return (
+            name.includes("cuisine") &&
+            (name.includes("volet") || name.includes("blind") || name.includes("store"))
+          );
+        }) ?? null;
+      }
+
+      async function updateBlindState() {
+        try {
+          const token = getAccessToken();
+          if (!token) {
+            BLIND_STATE_EL.textContent = "Token HA manquant";
+            return;
+          }
+
+          const states = await fetchStates(token);
+          const entity = detectCuisineBlind(states);
+          BLIND_STATE_EL.textContent = entity
+            ? formatBlindState(entity.state)
+            : "Volet introuvable";
+        } catch {
+          BLIND_STATE_EL.textContent = "Etat indisponible";
+        }
+      }
+
+      updateClock();
+      updateBlindState();
+      setInterval(updateClock, 1000);
+      setInterval(updateBlindState, 30000);
+    </script>
+  </body>
+</html>

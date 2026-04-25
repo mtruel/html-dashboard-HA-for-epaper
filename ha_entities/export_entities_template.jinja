@@ -1,0 +1,40 @@
+{%- set include_domains = [
+  'sensor','binary_sensor','weather','climate','calendar',
+  'person','device_tracker','alarm_control_panel','sun'
+] -%}
+
+{%- set exclude_prefixes = [
+  'update.',
+  'automation.',
+  'script.',
+  'button.',
+  'scene.'
+] -%}
+
+{%- set ns = namespace(items=[]) -%}
+{%- for s in states
+    | sort(attribute='entity_id') -%}
+
+  {%- set domain = s.entity_id.split('.')[0] -%}
+  {%- set excluded = false -%}
+  {%- for p in exclude_prefixes -%}
+    {%- if s.entity_id.startswith(p) -%}
+      {%- set excluded = true -%}
+    {%- endif -%}
+  {%- endfor -%}
+
+  {%- if domain in include_domains and not excluded -%}
+    {%- set item = {
+      "entity_id": s.entity_id,
+      "name": s.name,
+      "state": s.state,
+      "unit": s.attributes.unit_of_measurement if s.attributes.unit_of_measurement is defined else none,
+      "device_class": s.attributes.device_class if s.attributes.device_class is defined else none,
+      "state_class": s.attributes.state_class if s.attributes.state_class is defined else none,
+      "icon": s.attributes.icon if s.attributes.icon is defined else none
+    } -%}
+    {%- set ns.items = ns.items + [item] -%}
+  {%- endif -%}
+
+{%- endfor -%}
+{{ ns.items | tojson }}

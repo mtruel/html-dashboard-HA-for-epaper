@@ -1,0 +1,72 @@
+esphome:
+  name: reterminal
+  friendly_name: reterminal
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "secret-key-that-is-generaly-auto-generated"
+
+ota:
+  - platform: esphome
+    password: "secret-password-that-is-generaly-auto-generated"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Reterminal Fallback Hotspot"
+    password: "secret-password-that-is-generaly-auto-generated"
+
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+
+captive_portal:
+
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+
+http_request:
+  verify_ssl: false
+  timeout: 20s
+  watchdog_timeout: 25s
+
+online_image:
+  - id: dashboard_image
+    format: PNG
+    type: BINARY
+    buffer_size: 65536
+    url: http://192.168.1.54:10000/dashboard-reterminal/0?viewport=800x480&colors=000000,FFFFFF&invert
+    update_interval: 300s
+    on_download_finished:
+      - component.update: epaper_display
+
+display:
+  - platform: waveshare_epaper
+    id: epaper_display
+    model: 7.50inv2 # You can use 7.50inv2alt when you draw complex info and it display not good.
+    cs_pin: GPIO10
+    dc_pin: GPIO11
+    reset_pin:
+      number: GPIO12
+      inverted: false
+    busy_pin:
+      number: GPIO13
+      inverted: true
+    update_interval: never
+    lambda: |-
+      it.image(0, 0, id(dashboard_image));
