@@ -101,6 +101,11 @@ It reads your Home Assistant token from `.env`, injects it into browser localSto
    - `python3 scripts/dev_preview.py`
 4. Open:
    - `http://127.0.0.1:8000`
+5. Optional PNG render preview generated locally by the preview server:
+   - open `http://127.0.0.1:8000/__preview.png`
+   - optional query params: `width`, `height`, `delay_ms`, `bw`, `threshold`
+   - by default `bw=true` (black/white output), threshold default is `128`
+   - example: `http://127.0.0.1:8000/__preview.png?width=800&height=480&delay_ms=1500&threshold=140`
 
 Notes:
 - This is for local development only.
