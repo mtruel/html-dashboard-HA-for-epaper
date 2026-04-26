@@ -106,6 +106,10 @@ It reads your Home Assistant token from `.env`, injects it into browser localSto
    - optional query params: `width`, `height`, `delay_ms`, `bw`, `threshold`
    - by default `bw=true` (black/white output), threshold default is `128`
    - example: `http://127.0.0.1:8000/__preview.png?width=800&height=480&delay_ms=1500&threshold=140`
+6. Optional live auto-reload page for PNG preview:
+   - open `http://127.0.0.1:8000/__preview_live`
+   - optional query params: `refresh_ms` + all PNG params above
+   - example: `http://127.0.0.1:8000/__preview_live?refresh_ms=10000&threshold=140`
 
 Notes:
 - This is for local development only.

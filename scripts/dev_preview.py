@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -27,15 +28,19 @@ ENV_PATH = ROOT_DIR / ".env"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 DEFAULT_PNG_ROUTE = "/__preview.png"
+DEFAULT_PNG_LIVE_ROUTE = "/preview"
 DEFAULT_CAPTURE_WIDTH = 800
 DEFAULT_CAPTURE_HEIGHT = 480
 DEFAULT_CAPTURE_DELAY_MS = 1200
 DEFAULT_BW_THRESHOLD = 128
+DEFAULT_LIVE_REFRESH_MS = 15000
 
 _ENV_CACHE: dict[str, str] = {}
 _ENV_MTIME_NS: int | None = None
 _INDEX_CACHE = ""
 _INDEX_MTIME_NS: int | None = None
+_CHROME_BIN_CACHE: str | None = None
+_LAST_LOGGED_DEV_VERSION: str | None = None
 
 
 def load_env_file(path: Path) -> dict[str, str]:
@@ -85,6 +90,18 @@ def get_dev_version() -> str:
     return f"{index_mtime}-{env_mtime}"
 
 
+def log_dev_change_if_needed(version: str) -> None:
+    global _LAST_LOGGED_DEV_VERSION
+    if _LAST_LOGGED_DEV_VERSION is None:
+        _LAST_LOGGED_DEV_VERSION = version
+        return
+    if version == _LAST_LOGGED_DEV_VERSION:
+        return
+    _LAST_LOGGED_DEV_VERSION = version
+    stamp = datetime.now().strftime("%H:%M:%S")
+    print(f"[{stamp}] Dev preview changed -> browser reload triggered")
+
+
 def build_injected_token_script(token: str) -> str:
     escaped = token.replace("\\", "\\\\").replace('"', '\\"')
     return (
@@ -118,9 +135,20 @@ def build_live_reload_script(version: str) -> str:
     )
 
 
+def build_preview_mode_style_script() -> str:
+    return (
+        "<script>"
+        '(function(){'
+        "const style=document.createElement('style');"
+        'style.textContent="html,body{margin:0!important;padding:0!important;width:100%;min-height:100%;overflow-x:hidden;}";'
+        "document.head.appendChild(style);"
+        "})();"
+        "</script>"
+    )
+
+
 class DashboardDevHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        self._dotenv: dict[str, str] = {}
         super().__init__(*args, directory=str(SRC_DIR), **kwargs)
 
     def _send_bytes_response(self, status: int, body: bytes, content_type: str) -> None:
@@ -131,16 +159,20 @@ class DashboardDevHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802 (HTTP method naming)
-        self._dotenv = get_env()
         request_path = urlsplit(self.path).path
 
         if self.path == "/__dev_version":
-            version = get_dev_version().encode("utf-8")
+            version_text = get_dev_version()
+            log_dev_change_if_needed(version_text)
+            version = version_text.encode("utf-8")
             self._send_bytes_response(200, version, "text/plain; charset=utf-8")
             return
 
         if request_path == DEFAULT_PNG_ROUTE:
             self._proxy_png_preview()
+            return
+        if request_path == DEFAULT_PNG_LIVE_ROUTE:
+            self._serve_png_live_preview()
             return
 
         if request_path.startswith("/api/"):
@@ -153,9 +185,15 @@ class DashboardDevHandler(SimpleHTTPRequestHandler):
 
         super().do_GET()
 
+    def log_message(self, format: str, *args) -> None:  # noqa: A003
+        """Silence per-request HTTP access logs to keep terminal readable."""
+        return
+
     def _serve_index(self) -> None:
         html = get_index_html()
-        token = self._dotenv.get("HA_TOKEN")
+        query = parse_qs(urlsplit(self.path).query)
+        preview_mode = self._bool_query_value(query, "preview_mode", False)
+        token = get_env().get("HA_TOKEN")
         dev_version = get_dev_version()
         if token:
             token_script = build_injected_token_script(token)
@@ -166,13 +204,17 @@ class DashboardDevHandler(SimpleHTTPRequestHandler):
 
         live_reload_script = build_live_reload_script(dev_version)
         html = html.replace("</body>", f"    {live_reload_script}\n  </body>")
+        if preview_mode:
+            preview_style_script = build_preview_mode_style_script()
+            html = html.replace("</body>", f"    {preview_style_script}\n  </body>")
 
         encoded = html.encode("utf-8")
         self._send_bytes_response(200, encoded, "text/html; charset=utf-8")
 
     def _proxy_home_assistant(self) -> None:
-        base_url = self._dotenv.get("HA_URL", "").rstrip("/")
-        token = self._dotenv.get("HA_TOKEN")
+        dotenv = get_env()
+        base_url = dotenv.get("HA_URL", "").rstrip("/")
+        token = dotenv.get("HA_TOKEN")
         if not base_url:
             self.send_error(500, "HA_URL missing in .env")
             return
@@ -201,12 +243,12 @@ class DashboardDevHandler(SimpleHTTPRequestHandler):
             self.send_error(502, f"Unable to reach Home Assistant: {exc.reason}")
 
     def _proxy_png_preview(self) -> None:
-        query = parse_qs(urlsplit(self.path).query)
-        width = self._int_query_value(query, "width", DEFAULT_CAPTURE_WIDTH)
-        height = self._int_query_value(query, "height", DEFAULT_CAPTURE_HEIGHT)
-        delay_ms = self._int_query_value(query, "delay_ms", DEFAULT_CAPTURE_DELAY_MS)
-        threshold = self._int_query_value(query, "threshold", DEFAULT_BW_THRESHOLD)
-        bw = self._bool_query_value(query, "bw", True)
+        options = self._parse_png_options(parse_qs(urlsplit(self.path).query))
+        width = options["width"]
+        height = options["height"]
+        delay_ms = options["delay_ms"]
+        threshold = options["threshold"]
+        bw = options["bw"]
 
         if width <= 0 or height <= 0:
             self.send_error(400, "width and height must be positive integers")
@@ -218,8 +260,7 @@ class DashboardDevHandler(SimpleHTTPRequestHandler):
             self.send_error(400, "threshold must be in range 0..255")
             return
 
-        page_query = urlencode({"_capture_ts": get_dev_version()})
-        page_url = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/index.html?{page_query}"
+        page_url = self._build_capture_page_url()
 
         chrome_path = self._resolve_chrome_binary()
         if chrome_path is None:
@@ -271,6 +312,116 @@ class DashboardDevHandler(SimpleHTTPRequestHandler):
             except OSError:
                 pass
 
+    def _serve_png_live_preview(self) -> None:
+        query = parse_qs(urlsplit(self.path).query)
+        options = self._parse_png_options(query)
+        width = options["width"]
+        height = options["height"]
+        delay_ms = options["delay_ms"]
+        threshold = options["threshold"]
+        bw = options["bw"]
+        refresh_ms = self._int_query_value(query, "refresh_ms", DEFAULT_LIVE_REFRESH_MS)
+
+        if refresh_ms < 500:
+            refresh_ms = 500
+
+        png_url = self._build_png_preview_url(width, height, delay_ms, threshold, bw)
+        html = f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNG + HTML Live Preview</title>
+    <style>
+      :root {{
+        --preview-width: {width};
+        --preview-height: {height};
+      }}
+      body {{
+        margin: 0;
+        background: #111;
+        color: #ddd;
+        font-family: system-ui, sans-serif;
+      }}
+      .wrap {{
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        padding: 16px;
+      }}
+      .section-title {{
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }}
+      .frame {{
+        border: 3px solid #ff2b2b;
+        background: white;
+        box-sizing: border-box;
+      }}
+      #preview {{
+        display: block;
+        width: min(100%, 1000px);
+        max-width: none;
+        aspect-ratio: var(--preview-width) / var(--preview-height);
+        height: auto;
+      }}
+      #html-preview {{
+        display: block;
+        width: min(100%, 1000px);
+        max-width: none;
+        aspect-ratio: var(--preview-width) / var(--preview-height);
+        height: auto;
+        background: #fff;
+      }}
+      .panel {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+      }}
+      .meta {{
+        margin-top: 6px;
+        font-size: 11px;
+        opacity: 0.8;
+      }}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="panel">
+        <p class="section-title">PNG Preview</p>
+        <img id="preview" class="frame" src="{png_url}" alt="Dashboard PNG preview" />
+        <div class="meta">refresh_ms={refresh_ms} | source={png_url}</div>
+      </section>
+      <section class="panel">
+        <p class="section-title">HTML Preview</p>
+        <iframe
+          id="html-preview"
+          class="frame"
+          src="/index.html?preview_mode=true"
+          title="Dashboard HTML preview"
+          loading="eager"
+        ></iframe>
+      </section>
+    </div>
+    <script>
+      const img = document.getElementById("preview");
+      const base = "{png_url}";
+      function reloadImage() {{
+        img.src = `${{base}}&__ts=${{Date.now()}}`;
+      }}
+      setInterval(reloadImage, {refresh_ms});
+    </script>
+  </body>
+</html>
+"""
+        self._send_bytes_response(200, html.encode("utf-8"), "text/html; charset=utf-8")
+
     @staticmethod
     def _int_query_value(query: dict[str, list[str]], key: str, default: int) -> int:
         values = query.get(key)
@@ -293,6 +444,36 @@ class DashboardDevHandler(SimpleHTTPRequestHandler):
             return False
         return default
 
+    @classmethod
+    def _parse_png_options(cls, query: dict[str, list[str]]) -> dict[str, int | bool]:
+        return {
+            "width": cls._int_query_value(query, "width", DEFAULT_CAPTURE_WIDTH),
+            "height": cls._int_query_value(query, "height", DEFAULT_CAPTURE_HEIGHT),
+            "delay_ms": cls._int_query_value(query, "delay_ms", DEFAULT_CAPTURE_DELAY_MS),
+            "threshold": cls._int_query_value(query, "threshold", DEFAULT_BW_THRESHOLD),
+            "bw": cls._bool_query_value(query, "bw", True),
+        }
+
+    @staticmethod
+    def _build_capture_page_url() -> str:
+        page_query = urlencode({"_capture_ts": get_dev_version(), "preview_mode": "true"})
+        return f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/index.html?{page_query}"
+
+    @staticmethod
+    def _build_png_preview_url(
+        width: int, height: int, delay_ms: int, threshold: int, bw: bool
+    ) -> str:
+        png_query = urlencode(
+            {
+                "width": width,
+                "height": height,
+                "delay_ms": delay_ms,
+                "threshold": threshold,
+                "bw": "true" if bw else "false",
+            }
+        )
+        return f"{DEFAULT_PNG_ROUTE}?{png_query}"
+
     @staticmethod
     def _convert_png_to_bw(path: Path, threshold: int) -> None:
         with Image.open(path) as image:
@@ -300,11 +481,15 @@ class DashboardDevHandler(SimpleHTTPRequestHandler):
             binary = grayscale.point(lambda pixel: 255 if pixel >= threshold else 0, mode="1")
             binary.convert("L").save(path, format="PNG", optimize=True)
 
-    @staticmethod
-    def _resolve_chrome_binary() -> str | None:
+    @classmethod
+    def _resolve_chrome_binary(cls) -> str | None:
+        global _CHROME_BIN_CACHE
+        if _CHROME_BIN_CACHE is not None:
+            return _CHROME_BIN_CACHE
         for candidate in ("google-chrome", "chromium", "chromium-browser"):
             path = shutil.which(candidate)
             if path:
+                _CHROME_BIN_CACHE = path
                 return path
         return None
 
@@ -316,6 +501,7 @@ def main() -> None:
     server = ThreadingHTTPServer((host, port), DashboardDevHandler)
     print(f"Local dashboard preview: http://{host}:{port}")
     print(f"Preview PNG route: http://{host}:{port}{DEFAULT_PNG_ROUTE}")
+    print(f"Live PNG preview route: http://{host}:{port}{DEFAULT_PNG_LIVE_ROUTE}")
     print(f"Using dotenv file: {ENV_PATH}")
     print("Expected .env keys: HA_URL, HA_TOKEN")
     print("PNG preview uses local headless Chrome capture")
