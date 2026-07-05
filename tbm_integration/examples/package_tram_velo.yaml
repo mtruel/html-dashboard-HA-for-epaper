@@ -1,0 +1,287 @@
+# Combined package — copy to config/packages/tbm/tram_velo.yaml
+#
+# Configured for:
+#   - Tram Bordeaux: Alfred de Vigny platform BP:5235 (toward Ste Catherine / Gare de Bègles)
+#   - Tram Mérignac: Alfred de Vigny platform BP:5234 (toward Le Haillan Rostand / Mérignac Aéroport)
+#   - Le Vélo: Fontaine d'Arlac (ident=90)
+#
+# IMPORTANT — tram LineRef numbers are NOT the letter (Tram A is line 59, not
+# line 01; low numbers are bus "Lianes" routes). Never guess a LineRef from a
+# tram letter. Always resolve it with:
+#   python3 ../scripts/discover_ids.py lines
+#   python3 ../scripts/discover_ids.py tram "your stop name"
+#
+# After editing: restart Home Assistant, then wire entity IDs into
+# src/index.html (see examples/index_html_entities.example.js).
+
+rest:
+  - resource: >-
+      https://bdx.mecatran.com/utw/ws/siri/2.0/bordeaux/stop-monitoring.json?AccountKey=opendata-bordeaux-metropole-flux-gtfs-rt&MonitoringRef=bordeaux:StopPoint:BP:5235:LOC&MaximumStopVisits=8
+    scan_interval: 60
+    timeout: 20
+    sensor:
+      - name: "TBM Tram raw"
+        unique_id: tbm_tram_siri_raw
+        value_template: >-
+          {% set delivery = value_json['Siri']['ServiceDelivery']['StopMonitoringDelivery'][0] %}
+          {% set visits = delivery.get('MonitoredStopVisit', []) %}
+          {{ visits | length }}
+        unit_of_measurement: "passages"
+        json_attributes_path: "$.Siri.ServiceDelivery.StopMonitoringDelivery[0]"
+        json_attributes:
+          - MonitoredStopVisit
+          - ResponseTimestamp
+
+  - resource: >-
+      https://bdx.mecatran.com/utw/ws/siri/2.0/bordeaux/stop-monitoring.json?AccountKey=opendata-bordeaux-metropole-flux-gtfs-rt&MonitoringRef=bordeaux:StopPoint:BP:5234:LOC&MaximumStopVisits=8
+    scan_interval: 60
+    timeout: 20
+    sensor:
+      - name: "TBM Tram Merignac raw"
+        unique_id: tbm_tram_merignac_siri_raw
+        value_template: >-
+          {% set delivery = value_json['Siri']['ServiceDelivery']['StopMonitoringDelivery'][0] %}
+          {% set visits = delivery.get('MonitoredStopVisit', []) %}
+          {{ visits | length }}
+        unit_of_measurement: "passages"
+        json_attributes_path: "$.Siri.ServiceDelivery.StopMonitoringDelivery[0]"
+        json_attributes:
+          - MonitoredStopVisit
+          - ResponseTimestamp
+
+  - resource: >-
+      https://datahub.bordeaux-metropole.fr/api/explore/v2.1/catalog/datasets/ci_vcub_p/records?limit=1&where=ident=90
+    scan_interval: 150
+    timeout: 20
+    sensor:
+      - name: "Le Vélo raw"
+        unique_id: le_velo_station_raw
+        value_template: >-
+          {% set results = value_json.get('results', []) %}
+          {% if results | length > 0 %}
+            {{ results[0].nbvelos | default(0) }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+        unit_of_measurement: "bikes"
+        json_attributes_path: "$.results[0]"
+        json_attributes:
+          - nom
+          - ident
+          - nbvelos
+          - nbelec
+          - nbclassiq
+          - nbplaces
+          - etat
+
+# Note: sensors below with a unit_of_measurement (min/bikes/docks) are treated
+# as numeric by HA, which requires the state template to render a number or
+# `none` (never a text string like "unavailable"). That's why the "no data"
+# branches below render `{{ none }}` — HA then shows the entity as `unknown`.
+#
+# Note on Le Vélo fields: `nbplaces` is the official "free docks available"
+# count (NOT total capacity). Total capacity ≈ nbvelos + nbplaces.
+#
+# Note on tram deduplication: the SIRI feed can report the SAME upcoming tram
+# twice (identical LineRef/Order/AimedArrivalTime, just refreshed). "TBM Tram
+# next visits" below deduplicates sensor.tbm_tram_raw's visit list before any
+# other sensor uses it, so "Tram 1" and "Tram 2" are always two genuinely
+# different trams, not the same one twice.
+template:
+  - sensor:
+      - name: "TBM Tram next visits"
+        unique_id: tbm_tram_next_visits
+        state: >
+          {% set raw = state_attr('sensor.tbm_tram_raw', 'MonitoredStopVisit') or [] %}
+          {{ raw | length }}
+        attributes:
+          visits: >
+            {% set raw = state_attr('sensor.tbm_tram_raw', 'MonitoredStopVisit') or [] %}
+            {% set seen = namespace(keys=[]) %}
+            {% set result = namespace(items=[]) %}
+            {% for v in raw %}
+              {% set mvj = v['MonitoredVehicleJourney'] %}
+              {% set call = mvj.get('MonitoredCall', {}) %}
+              {% set key = (mvj.get('LineRef', {}).get('value'), call.get('Order'), call.get('AimedArrivalTime') or call.get('AimedDepartureTime')) %}
+              {% if key not in seen.keys %}
+                {% set seen.keys = seen.keys + [key] %}
+                {% set result.items = result.items + [v] %}
+              {% endif %}
+            {% endfor %}
+            {{ result.items[:2] }}
+
+      - name: "TBM Tram 1 min"
+        unique_id: tbm_tram_1_minutes
+        unit_of_measurement: "min"
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_next_visits', 'visits') or [] %}
+          {% if visits | length > 0 %}
+            {% set call = visits[0]['MonitoredVehicleJourney'].get('MonitoredCall', {}) %}
+            {% set t = call.get('ExpectedDepartureTime') or call.get('ExpectedArrivalTime') or call.get('AimedDepartureTime') %}
+            {% if t %}
+              {{ ((as_timestamp(t) - now().timestamp()) / 60) | round(0) | int }}
+            {% else %}
+              {{ none }}
+            {% endif %}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram 2 min"
+        unique_id: tbm_tram_2_minutes
+        unit_of_measurement: "min"
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_next_visits', 'visits') or [] %}
+          {% if visits | length > 1 %}
+            {% set call = visits[1]['MonitoredVehicleJourney'].get('MonitoredCall', {}) %}
+            {% set t = call.get('ExpectedDepartureTime') or call.get('ExpectedArrivalTime') or call.get('AimedDepartureTime') %}
+            {% if t %}
+              {{ ((as_timestamp(t) - now().timestamp()) / 60) | round(0) | int }}
+            {% else %}
+              {{ none }}
+            {% endif %}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram 1 line"
+        unique_id: tbm_tram_1_line
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_next_visits', 'visits') or [] %}
+          {% if visits | length > 0 %}
+            {% set ref = visits[0]['MonitoredVehicleJourney'].get('LineRef', {}).get('value') %}
+            {{ {'bordeaux:Line:59:LOC': 'A', 'bordeaux:Line:164:LOC': 'F'}.get(ref, ref) if ref else none }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram 2 line"
+        unique_id: tbm_tram_2_line
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_next_visits', 'visits') or [] %}
+          {% if visits | length > 1 %}
+            {% set ref = visits[1]['MonitoredVehicleJourney'].get('LineRef', {}).get('value') %}
+            {{ {'bordeaux:Line:59:LOC': 'A', 'bordeaux:Line:164:LOC': 'F'}.get(ref, ref) if ref else none }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram 1 destination"
+        unique_id: tbm_tram_1_destination
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_next_visits', 'visits') or [] %}
+          {% if visits | length > 0 %}
+            {% set mvj = visits[0]['MonitoredVehicleJourney'] %}
+            {% set dest = mvj.get('DestinationName') or mvj.get('DirectionName') %}
+            {{ dest[0]['value'] if dest else none }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram 2 destination"
+        unique_id: tbm_tram_2_destination
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_next_visits', 'visits') or [] %}
+          {% if visits | length > 1 %}
+            {% set mvj = visits[1]['MonitoredVehicleJourney'] %}
+            {% set dest = mvj.get('DestinationName') or mvj.get('DirectionName') %}
+            {{ dest[0]['value'] if dest else none }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram Merignac next visits"
+        unique_id: tbm_tram_merignac_next_visits
+        state: >
+          {% set raw = state_attr('sensor.tbm_tram_merignac_raw', 'MonitoredStopVisit') or [] %}
+          {{ raw | length }}
+        attributes:
+          visits: >
+            {% set raw = state_attr('sensor.tbm_tram_merignac_raw', 'MonitoredStopVisit') or [] %}
+            {% set seen = namespace(keys=[]) %}
+            {% set result = namespace(items=[]) %}
+            {% for v in raw %}
+              {% set mvj = v['MonitoredVehicleJourney'] %}
+              {% set call = mvj.get('MonitoredCall', {}) %}
+              {% set key = (mvj.get('LineRef', {}).get('value'), call.get('Order'), call.get('AimedArrivalTime') or call.get('AimedDepartureTime')) %}
+              {% if key not in seen.keys %}
+                {% set seen.keys = seen.keys + [key] %}
+                {% set result.items = result.items + [v] %}
+              {% endif %}
+            {% endfor %}
+            {{ result.items[:2] }}
+
+      - name: "TBM Tram Merignac 1 min"
+        unique_id: tbm_tram_merignac_1_minutes
+        unit_of_measurement: "min"
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_merignac_next_visits', 'visits') or [] %}
+          {% if visits | length > 0 %}
+            {% set call = visits[0]['MonitoredVehicleJourney'].get('MonitoredCall', {}) %}
+            {% set t = call.get('ExpectedDepartureTime') or call.get('ExpectedArrivalTime') or call.get('AimedDepartureTime') %}
+            {% if t %}
+              {{ ((as_timestamp(t) - now().timestamp()) / 60) | round(0) | int }}
+            {% else %}
+              {{ none }}
+            {% endif %}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram Merignac 2 min"
+        unique_id: tbm_tram_merignac_2_minutes
+        unit_of_measurement: "min"
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_merignac_next_visits', 'visits') or [] %}
+          {% if visits | length > 1 %}
+            {% set call = visits[1]['MonitoredVehicleJourney'].get('MonitoredCall', {}) %}
+            {% set t = call.get('ExpectedDepartureTime') or call.get('ExpectedArrivalTime') or call.get('AimedDepartureTime') %}
+            {% if t %}
+              {{ ((as_timestamp(t) - now().timestamp()) / 60) | round(0) | int }}
+            {% else %}
+              {{ none }}
+            {% endif %}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram Merignac 1 line"
+        unique_id: tbm_tram_merignac_1_line
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_merignac_next_visits', 'visits') or [] %}
+          {% if visits | length > 0 %}
+            {% set ref = visits[0]['MonitoredVehicleJourney'].get('LineRef', {}).get('value') %}
+            {{ {'bordeaux:Line:59:LOC': 'A', 'bordeaux:Line:164:LOC': 'F'}.get(ref, ref) if ref else none }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "TBM Tram Merignac 2 line"
+        unique_id: tbm_tram_merignac_2_line
+        state: >
+          {% set visits = state_attr('sensor.tbm_tram_merignac_next_visits', 'visits') or [] %}
+          {% if visits | length > 1 %}
+            {% set ref = visits[1]['MonitoredVehicleJourney'].get('LineRef', {}).get('value') %}
+            {{ {'bordeaux:Line:59:LOC': 'A', 'bordeaux:Line:164:LOC': 'F'}.get(ref, ref) if ref else none }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+
+      - name: "Le Vélo bikes"
+        unique_id: le_velo_bikes_count
+        unit_of_measurement: "bikes"
+        state: >
+          {% set nb = state_attr('sensor.le_velo_raw', 'nbvelos') %}
+          {{ nb if nb is not none else none }}
+
+      - name: "Le Vélo free docks"
+        unique_id: le_velo_free_docks
+        unit_of_measurement: "docks"
+        state: >
+          {% set places = state_attr('sensor.le_velo_raw', 'nbplaces') %}
+          {{ places if places is not none else none }}
+
+      - name: "Le Vélo station name"
+        unique_id: le_velo_station_name
+        state: >
+          {{ state_attr('sensor.le_velo_raw', 'nom') or none }}

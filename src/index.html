@@ -107,22 +107,30 @@
         display: flex;
         align-items: flex-start;
         gap: 10px;
+        flex-shrink: 0;
+      }
+
+      .center-panel {
+        flex: 1;
+        min-width: 0;
+        margin-top: 6px;
+        text-align: left;
+      }
+
+      .transport-line {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.3;
+        white-space: nowrap;
+      }
+
+      .transport-line + .transport-line {
+        margin-top: 3px;
       }
 
       .date-time {
         margin: 0;
         text-align: left;
-      }
-
-      .light-indicator {
-        margin-top: 6px;
-        font-size: 30px;
-        line-height: 1;
-        visibility: hidden;
-      }
-
-      .light-indicator.on {
-        visibility: visible;
       }
 
       .date {
@@ -141,6 +149,7 @@
       .right-panel {
         margin-top: 4px;
         text-align: right;
+        flex-shrink: 0;
       }
 
       .weather {
@@ -151,6 +160,10 @@
 
       .temperatures {
         margin: 0;
+      }
+
+      .temperatures p {
+        margin: 0;
         font-size: 24px;
         line-height: 1.25;
       }
@@ -159,8 +172,8 @@
         position: absolute;
         left: 0;
         right: 0;
-        top: 140px;
-        height: 316px;
+        top: 158px;
+        height: 298px;
         border: none;
         border-top: 2px solid #000;
         border-radius: 0;
@@ -253,15 +266,22 @@
     <main class="screen" role="main" aria-label="Aperçu du dashboard">
       <div class="top-row">
         <div class="left-panel">
-          <span id="light-indicator" class="light-indicator" aria-hidden="true">💡</span>
           <div class="date-time" aria-live="polite">
             <p id="date" class="date">--</p>
             <p id="time" class="clock">--:--</p>
           </div>
         </div>
+        <div class="center-panel transport" aria-live="polite">
+          <p id="velo-arlac" class="transport-line">V³ Arlac --m --e --p</p>
+          <p id="tram-bordeaux" class="transport-line">Tram Alfred de V. −> Bordeaux : [--][--]</p>
+          <p id="tram-merignac" class="transport-line">Tram A. de V. −> Mérignac. : [--][--]</p>
+        </div>
         <div class="right-panel" aria-live="polite">
           <p id="weather-state" class="weather">--</p>
-          <p id="temps" class="temperatures">Ext: -- / Int: --</p>
+          <div class="temperatures">
+            <p id="temp-ext">Ext: --</p>
+            <p id="temp-int">Int: --</p>
+          </div>
         </div>
       </div>
       <section class="calendar" aria-label="Calendrier">
@@ -281,15 +301,27 @@
       });
       const DATE_EL = document.getElementById("date");
       const TIME_EL = document.getElementById("time");
-      const LIGHT_INDICATOR_EL = document.getElementById("light-indicator");
       const WEATHER_STATE_EL = document.getElementById("weather-state");
-      const TEMPS_EL = document.getElementById("temps");
+      const TEMP_EXT_EL = document.getElementById("temp-ext");
+      const TEMP_INT_EL = document.getElementById("temp-int");
+      const VELO_ARLAC_EL = document.getElementById("velo-arlac");
+      const TRAM_BORDEAUX_EL = document.getElementById("tram-bordeaux");
+      const TRAM_MERIGNAC_EL = document.getElementById("tram-merignac");
       const CALENDAR_GRID_EL = document.getElementById("calendar-grid");
 
       const OUTDOOR_TEMP_ENTITY_ID = "sensor.temperature_humidite_exterieure_temperature";
       const INDOOR_TEMP_ENTITY_ID = "sensor.temperature_humidite_1_temperature";
       const WEATHER_ENTITY_ID = "weather.forecast_maison";
       const COLLABORATION_CALENDAR_ID = "calendar.collaboration";
+      const VELO_RAW_ENTITY_ID = "sensor.le_velo_raw";
+      const TRAM_BDX_1_MIN_ENTITY_ID = "sensor.tbm_tram_1_min";
+      const TRAM_BDX_2_MIN_ENTITY_ID = "sensor.tbm_tram_2_min";
+      const TRAM_BDX_1_LINE_ENTITY_ID = "sensor.tbm_tram_1_line";
+      const TRAM_BDX_2_LINE_ENTITY_ID = "sensor.tbm_tram_2_line";
+      const TRAM_MER_1_MIN_ENTITY_ID = "sensor.tbm_tram_merignac_1_min";
+      const TRAM_MER_2_MIN_ENTITY_ID = "sensor.tbm_tram_merignac_2_min";
+      const TRAM_MER_1_LINE_ENTITY_ID = "sensor.tbm_tram_merignac_1_line";
+      const TRAM_MER_2_LINE_ENTITY_ID = "sensor.tbm_tram_merignac_2_line";
       const EVENT_DATE_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
         weekday: "short",
         day: "2-digit",
@@ -374,8 +406,50 @@
         return `${Math.round(value)}°C`;
       }
 
-      function isAnyLightOn(states) {
-        return states.some((entity) => entity.entity_id.startsWith("light.") && entity.state === "on");
+      function formatCount(value) {
+        if (value === null || value === undefined || value === "unknown" || value === "unavailable") {
+          return "--";
+        }
+        const n = Number(value);
+        return Number.isFinite(n) ? String(n) : "--";
+      }
+
+      function formatVeloArlac(entity) {
+        if (!entity) return "V³ Arlac --m --e --p";
+        const m = formatCount(entity.attributes?.nbclassiq);
+        const e = formatCount(entity.attributes?.nbelec);
+        const p = formatCount(entity.attributes?.nbplaces);
+        return `V³ Arlac ${m}m ${e}e ${p}p`;
+      }
+
+      function formatTramMinutes(entity) {
+        if (!entity || entity.state === "unavailable" || entity.state === "unknown") return null;
+        const n = Number(entity.state);
+        return Number.isFinite(n) ? `${n} min` : null;
+      }
+
+      function formatTramSlot(minEntity, lineEntity) {
+        const minutes = formatTramMinutes(minEntity);
+        const line = lineEntity?.state;
+        if (
+          minutes === null ||
+          !line ||
+          line === "unknown" ||
+          line === "unavailable"
+        ) {
+          return "[--]";
+        }
+        return `[${minutes} (${line})]`;
+      }
+
+      function formatTramDirectionLine(label, min1, line1, min2, line2) {
+        return `${label} : ${formatTramSlot(min1, line1)}${formatTramSlot(min2, line2)}`;
+      }
+
+      function resetTransportPanel() {
+        VELO_ARLAC_EL.textContent = "V³ Arlac --m --e --p";
+        TRAM_BORDEAUX_EL.textContent = "Tram Alfred de V. −> Bordeaux : [--][--]";
+        TRAM_MERIGNAC_EL.textContent = "Tram A. de V. −> Mérignac. : [--][--]";
       }
 
       function getEventStartDate(event) {
@@ -500,8 +574,9 @@
           const token = getAccessToken();
           if (!token) {
             WEATHER_STATE_EL.textContent = "Token HA manquant";
-            TEMPS_EL.textContent = "Ext: -- / Int: --";
-            LIGHT_INDICATOR_EL.classList.remove("on");
+            TEMP_EXT_EL.textContent = "Ext: --";
+            TEMP_INT_EL.textContent = "Int: --";
+            resetTransportPanel();
             renderCalendarStatus("Token HA manquant");
             return;
           }
@@ -517,23 +592,43 @@
           const weatherEntity = findEntity(states, WEATHER_ENTITY_ID);
           const outdoorTemp = findEntity(states, OUTDOOR_TEMP_ENTITY_ID);
           const indoorTemp = findEntity(states, INDOOR_TEMP_ENTITY_ID);
+          const veloRaw = findEntity(states, VELO_RAW_ENTITY_ID);
+          const tramBdx1Min = findEntity(states, TRAM_BDX_1_MIN_ENTITY_ID);
+          const tramBdx2Min = findEntity(states, TRAM_BDX_2_MIN_ENTITY_ID);
+          const tramBdx1Line = findEntity(states, TRAM_BDX_1_LINE_ENTITY_ID);
+          const tramBdx2Line = findEntity(states, TRAM_BDX_2_LINE_ENTITY_ID);
+          const tramMer1Min = findEntity(states, TRAM_MER_1_MIN_ENTITY_ID);
+          const tramMer2Min = findEntity(states, TRAM_MER_2_MIN_ENTITY_ID);
+          const tramMer1Line = findEntity(states, TRAM_MER_1_LINE_ENTITY_ID);
+          const tramMer2Line = findEntity(states, TRAM_MER_2_LINE_ENTITY_ID);
 
           WEATHER_STATE_EL.textContent = weatherEntity
             ? formatWeatherState(weatherEntity.state)
             : "Météo indisponible";
-          TEMPS_EL.textContent = `Ext: ${formatTemperature(outdoorTemp)} / Int: ${formatTemperature(indoorTemp)}`;
-
-          if (isAnyLightOn(states)) {
-            LIGHT_INDICATOR_EL.classList.add("on");
-          } else {
-            LIGHT_INDICATOR_EL.classList.remove("on");
-          }
+          TEMP_EXT_EL.textContent = `Ext: ${formatTemperature(outdoorTemp)}`;
+          TEMP_INT_EL.textContent = `Int: ${formatTemperature(indoorTemp)}`;
+          VELO_ARLAC_EL.textContent = formatVeloArlac(veloRaw);
+          TRAM_BORDEAUX_EL.textContent = formatTramDirectionLine(
+            "Tram Alfred de V. −> Bordeaux",
+            tramBdx1Min,
+            tramBdx1Line,
+            tramBdx2Min,
+            tramBdx2Line
+          );
+          TRAM_MERIGNAC_EL.textContent = formatTramDirectionLine(
+            "Tram A. de V. −> Mérignac.",
+            tramMer1Min,
+            tramMer1Line,
+            tramMer2Min,
+            tramMer2Line
+          );
 
           renderCalendarEvents(Array.isArray(calendarEvents) ? calendarEvents : [], startDate);
         } catch {
           WEATHER_STATE_EL.textContent = "Météo indisponible";
-          TEMPS_EL.textContent = "Ext: -- / Int: --";
-          LIGHT_INDICATOR_EL.classList.remove("on");
+          TEMP_EXT_EL.textContent = "Ext: --";
+          TEMP_INT_EL.textContent = "Int: --";
+          resetTransportPanel();
           renderCalendarStatus("Calendrier indisponible");
         }
       }

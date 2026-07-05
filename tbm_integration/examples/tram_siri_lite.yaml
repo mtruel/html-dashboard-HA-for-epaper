@@ -1,0 +1,39 @@
+# TBM tram — SIRI-Lite stop monitoring (official, public AccountKey)
+#
+# Copy into configuration.yaml or include via packages.
+# Configured for: Alfred de Vigny, direction Ste Catherine (Tram A) / Gare de
+# Bègles (Tram F) — MonitoringRef bordeaux:StopPoint:BP:5235:LOC.
+# No LineRef filter: this platform only serves Tram A (line 59) and Tram F
+# (line 164), so both come through mixed automatically.
+#
+# To use your own stop:
+#   1. Find your MonitoringRef: python3 ../scripts/discover_ids.py tram "your stop name"
+#   2. See current tram LineRefs (if you need to filter to one line):
+#      python3 ../scripts/discover_ids.py lines
+#      IMPORTANT: tram letters do NOT map to low line numbers (Tram A is
+#      line 59, not line 01 — those low numbers are bus "Lianes" routes).
+#   3. Replace MonitoringRef=... (and optionally add &LineRef=...) below.
+#
+# IMPORTANT quirk: the SIRI feed sometimes reports the SAME upcoming tram as
+# two separate visit entries (an "aimed" one and an updated "expected" one
+# moments later) — identical LineRef/Order/AimedArrivalTime. MaximumStopVisits
+# is set to 8 (not 2) here so there's enough raw data to safely deduplicate
+# down to 2 genuinely distinct trams in template_sensors.yaml. Don't lower this.
+
+rest:
+  - resource: >-
+      https://bdx.mecatran.com/utw/ws/siri/2.0/bordeaux/stop-monitoring.json?AccountKey=opendata-bordeaux-metropole-flux-gtfs-rt&MonitoringRef=bordeaux:StopPoint:BP:5235:LOC&MaximumStopVisits=8
+    scan_interval: 60
+    timeout: 20
+    sensor:
+      - name: "TBM Tram raw"
+        unique_id: tbm_tram_siri_raw
+        value_template: >-
+          {% set delivery = value_json['Siri']['ServiceDelivery']['StopMonitoringDelivery'][0] %}
+          {% set visits = delivery.get('MonitoredStopVisit', []) %}
+          {{ visits | length }}
+        unit_of_measurement: "passages"
+        json_attributes_path: "$.Siri.ServiceDelivery.StopMonitoringDelivery[0]"
+        json_attributes:
+          - MonitoredStopVisit
+          - ResponseTimestamp

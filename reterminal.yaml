@@ -51,14 +51,15 @@ online_image:
     type: BINARY
     buffer_size: 65536
     url: http://192.168.1.54:10000/dashboard-reterminal/0?viewport=800x480&colors=000000,FFFFFF&invert
-    update_interval: 300s
+    update_interval: 60s
     on_download_finished:
       - component.update: epaper_display
 
 display:
   - platform: waveshare_epaper
     id: epaper_display
-    model: 7.50inv2 # You can use 7.50inv2alt when you draw complex info and it display not good.
+    model: 7.50inv2p # Partial + fast refresh (E1001 V2 panels). Use 7.50inv2alt if display looks wrong.
+    full_update_every: 30
     cs_pin: GPIO10
     dc_pin: GPIO11
     reset_pin:

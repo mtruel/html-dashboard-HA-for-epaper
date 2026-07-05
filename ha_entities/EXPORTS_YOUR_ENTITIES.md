@@ -1,33 +1,18 @@
 # HA Entities Export Helper
 
-This folder contains two ways to export a clean JSON snapshot of entities for dashboard design and future updates:
 
+
+This folder contains a Home Assistant Developer Tools template to export a clean JSON snapshot of entities for dashboard design and future updates:
+
+A json export of your home assistant entities is not required. Can be modified since it is only used as documentation. It simplifies the development process by knowing easly what entities are available. Useful for IA agents. 
 - a Home Assistant Developer Tools template
-- a Python API export script using your local `.env` token
 
 ## Files
 
 - `export_entities_template.jinja`: Jinja template to run in Home Assistant Developer Tools.
-- `export_entities_api.py`: Python script that calls `GET /api/states` and writes filtered output.
 - `result.json`: output snapshot of entities.
 
-## Option A - Python API export (recommended)
-
-Prerequisites:
-
-- project root `.env` file with:
-  - `HA_URL=http://<HA_HOST>:8123`
-  - `HA_TOKEN=<LONG_LIVED_ACCESS_TOKEN>`
-
-Run from project root:
-
-- `python3 ha_entities/export_entities_api.py`
-
-Output:
-
-- writes filtered entities to `ha_entities/result.json`
-
-## Option B - Home Assistant template export
+## Home Assistant template export
 
 1. Open Home Assistant.
 2. Go to `Developer Tools` -> `Template`.
@@ -36,7 +21,7 @@ Output:
 5. Copy the generated JSON output.
 6. Paste it into `ha_entities/result.json` (replace previous content).
 
-## What the script exports
+## What the export includes
 
 For selected domains, each item includes:
 

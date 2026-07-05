@@ -1,0 +1,36 @@
+# Le Vélo — Bordeaux Métropole open data (no API key)
+#
+# Configured for: Fontaine d'Arlac, ident=90.
+#
+# To use your own station, replace "ident=90" in the URL below with your
+# station's ident (see ../FIND_YOUR_IDS.md or
+# ../scripts/discover_ids.py velo "station name").
+#
+# Note: `nbplaces` is the official "free docks available" count, NOT total
+# capacity. Total capacity ≈ nbvelos + nbplaces.
+
+rest:
+  - resource: >-
+      https://datahub.bordeaux-metropole.fr/api/explore/v2.1/catalog/datasets/ci_vcub_p/records?limit=1&where=ident=90
+    scan_interval: 150
+    timeout: 20
+    sensor:
+      - name: "Le Vélo raw"
+        unique_id: le_velo_station_raw
+        value_template: >-
+          {% set results = value_json.get('results', []) %}
+          {% if results | length > 0 %}
+            {{ results[0].nbvelos | default(0) }}
+          {% else %}
+            {{ none }}
+          {% endif %}
+        unit_of_measurement: "bikes"
+        json_attributes_path: "$.results[0]"
+        json_attributes:
+          - nom
+          - ident
+          - nbvelos
+          - nbelec
+          - nbclassiq
+          - nbplaces
+          - etat
