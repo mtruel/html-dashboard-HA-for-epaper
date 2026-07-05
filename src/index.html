@@ -117,15 +117,31 @@
         text-align: left;
       }
 
+      .center-panel.transport {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        row-gap: 7px;
+        align-items: baseline;
+      }
+
       .transport-line {
+        display: contents;
+      }
+
+      .transport-label,
+      .transport-value {
         margin: 0;
         font-size: 13px;
-        line-height: 1.3;
+        line-height: 1.55;
         white-space: nowrap;
       }
 
-      .transport-line + .transport-line {
-        margin-top: 3px;
+      .transport-label {
+        text-align: left;
+      }
+
+      .transport-label::after {
+        content: " :";
       }
 
       .date-time {
@@ -154,7 +170,7 @@
 
       .weather {
         margin: 0;
-        font-size: 28px;
+        font-size: 20px;
         line-height: 1.2;
       }
 
@@ -272,9 +288,18 @@
           </div>
         </div>
         <div class="center-panel transport" aria-live="polite">
-          <p id="velo-arlac" class="transport-line">V³ Arlac --m --e --p</p>
-          <p id="tram-bordeaux" class="transport-line">Tram Alfred de V. −> Bordeaux : [--][--]</p>
-          <p id="tram-merignac" class="transport-line">Tram A. de V. −> Mérignac. : [--][--]</p>
+          <p id="velo-arlac" class="transport-line">
+            <span class="transport-label">V³ Arlac</span>
+            <span class="transport-value">🚲︎ -- | ⚡︎ -- | L --</span>
+          </p>
+          <p id="tram-bordeaux" class="transport-line">
+            <span class="transport-label">Alfred → Bordeaux</span>
+            <span class="transport-value">-- | --</span>
+          </p>
+          <p id="tram-merignac" class="transport-line">
+            <span class="transport-label">Alfred → Mérignac</span>
+            <span class="transport-value">-- | --</span>
+          </p>
         </div>
         <div class="right-panel" aria-live="polite">
           <p id="weather-state" class="weather">--</p>
@@ -322,6 +347,13 @@
       const TRAM_MER_2_MIN_ENTITY_ID = "sensor.tbm_tram_merignac_2_min";
       const TRAM_MER_1_LINE_ENTITY_ID = "sensor.tbm_tram_merignac_1_line";
       const TRAM_MER_2_LINE_ENTITY_ID = "sensor.tbm_tram_merignac_2_line";
+      const VELO_ARLAC_LABEL = "V³ Arlac";
+      const VELO_ICON_CLASSIC = "\u{1F6B2}\uFE0E";
+      const VELO_ICON_ELECTRIC = "\u26A1\uFE0E";
+      const VELO_ICON_FREE = "L";
+      const VELO_ARLAC_PLACEHOLDER = `${VELO_ICON_CLASSIC} -- | ${VELO_ICON_ELECTRIC} -- | ${VELO_ICON_FREE} --`;
+      const TRAM_BORDEAUX_LABEL = "Alfred → Bdx";
+      const TRAM_MERIGNAC_LABEL = "Alfred → Mer";
       const EVENT_DATE_FORMATTER = new Intl.DateTimeFormat("fr-FR", {
         weekday: "short",
         day: "2-digit",
@@ -414,18 +446,30 @@
         return Number.isFinite(n) ? String(n) : "--";
       }
 
-      function formatVeloArlac(entity) {
-        if (!entity) return "V³ Arlac --m --e --p";
+      function setTransportLine(el, label, value) {
+        el.innerHTML = `<span class="transport-label">${label}</span><span class="transport-value">${value}</span>`;
+      }
+
+      function formatVeloArlacValue(entity) {
+        if (!entity) return VELO_ARLAC_PLACEHOLDER;
         const m = formatCount(entity.attributes?.nbclassiq);
         const e = formatCount(entity.attributes?.nbelec);
         const p = formatCount(entity.attributes?.nbplaces);
-        return `V³ Arlac ${m}m ${e}e ${p}p`;
+        return `${VELO_ICON_CLASSIC} ${m} | ${VELO_ICON_ELECTRIC} ${e} | ${VELO_ICON_FREE} ${p}`;
       }
 
       function formatTramMinutes(entity) {
         if (!entity || entity.state === "unavailable" || entity.state === "unknown") return null;
         const n = Number(entity.state);
         return Number.isFinite(n) ? `${n} min` : null;
+      }
+
+      function formatTramLineBadge(line) {
+        const letter = String(line).trim().toUpperCase();
+        if (letter.length === 1 && letter >= "A" && letter <= "Z") {
+          return String.fromCodePoint(0x24b6 + (letter.charCodeAt(0) - 65));
+        }
+        return line;
       }
 
       function formatTramSlot(minEntity, lineEntity) {
@@ -437,19 +481,19 @@
           line === "unknown" ||
           line === "unavailable"
         ) {
-          return "[--]";
+          return "--";
         }
-        return `[${minutes} (${line})]`;
+        return `${minutes} ${formatTramLineBadge(line)}`;
       }
 
-      function formatTramDirectionLine(label, min1, line1, min2, line2) {
-        return `${label} : ${formatTramSlot(min1, line1)}${formatTramSlot(min2, line2)}`;
+      function formatTramDirectionValue(min1, line1, min2, line2) {
+        return `${formatTramSlot(min1, line1)} | ${formatTramSlot(min2, line2)}`;
       }
 
       function resetTransportPanel() {
-        VELO_ARLAC_EL.textContent = "V³ Arlac --m --e --p";
-        TRAM_BORDEAUX_EL.textContent = "Tram Alfred de V. −> Bordeaux : [--][--]";
-        TRAM_MERIGNAC_EL.textContent = "Tram A. de V. −> Mérignac. : [--][--]";
+        setTransportLine(VELO_ARLAC_EL, VELO_ARLAC_LABEL, VELO_ARLAC_PLACEHOLDER);
+        setTransportLine(TRAM_BORDEAUX_EL, TRAM_BORDEAUX_LABEL, "-- | --");
+        setTransportLine(TRAM_MERIGNAC_EL, TRAM_MERIGNAC_LABEL, "-- | --");
       }
 
       function getEventStartDate(event) {
@@ -607,20 +651,16 @@
             : "Météo indisponible";
           TEMP_EXT_EL.textContent = `Ext: ${formatTemperature(outdoorTemp)}`;
           TEMP_INT_EL.textContent = `Int: ${formatTemperature(indoorTemp)}`;
-          VELO_ARLAC_EL.textContent = formatVeloArlac(veloRaw);
-          TRAM_BORDEAUX_EL.textContent = formatTramDirectionLine(
-            "Tram Alfred de V. −> Bordeaux",
-            tramBdx1Min,
-            tramBdx1Line,
-            tramBdx2Min,
-            tramBdx2Line
+          setTransportLine(VELO_ARLAC_EL, VELO_ARLAC_LABEL, formatVeloArlacValue(veloRaw));
+          setTransportLine(
+            TRAM_BORDEAUX_EL,
+            TRAM_BORDEAUX_LABEL,
+            formatTramDirectionValue(tramBdx1Min, tramBdx1Line, tramBdx2Min, tramBdx2Line)
           );
-          TRAM_MERIGNAC_EL.textContent = formatTramDirectionLine(
-            "Tram A. de V. −> Mérignac.",
-            tramMer1Min,
-            tramMer1Line,
-            tramMer2Min,
-            tramMer2Line
+          setTransportLine(
+            TRAM_MERIGNAC_EL,
+            TRAM_MERIGNAC_LABEL,
+            formatTramDirectionValue(tramMer1Min, tramMer1Line, tramMer2Min, tramMer2Line)
           );
 
           renderCalendarEvents(Array.isArray(calendarEvents) ? calendarEvents : [], startDate);
